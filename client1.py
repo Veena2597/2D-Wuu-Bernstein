@@ -25,6 +25,7 @@ Rsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 Rsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 balance_table = [10, 10, 10]
 timetable = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+localchain = []
 
 
 class Node:
@@ -45,7 +46,6 @@ class Blockchain:
         self.head = None
 
     def push(self, node):
-
         if self.head is None:
             self.head = node
             return
@@ -61,8 +61,14 @@ class Blockchain:
             if temp.timestamp > timestamp:
                 nodelist.append(temp)
             temp = temp.next
-
         return nodelist
+
+    def remove(self, timestamp):
+        temp = self.head
+        while temp:
+            if temp.timestamp < timestamp:
+                temp.next = temp.next.next
+            temp = temp.next
 
 
 def listenTransaction(client_connection, client_address):
@@ -70,17 +76,15 @@ def listenTransaction(client_connection, client_address):
     while True:
         msg = client_connection.recv(1024)
         x = pickle.loads(msg)
-        if '5052' in str(client_connection):
-            updateTable(x, 1)
-            logging.debug("[CLIENT MESSAGE] Table obtained from Q")
-        if '5053' in str(client_connection):
-            updateTable(x, 2)
-            logging.debug("[CLIENT MESSAGE] Table obtained from R")
+        print(x)
+        updateTable(x['table'], x['client'])
+        logging.debug("[CLIENT MESSAGE] Table obtained from {}".format(str(client_address)))
         # heappush(buffer, Node(x['timestamp'], x['amount'], x['sender'], x['receiver']))
 
 
 def updateTable(new_table, client):
     global timetable
+    print(client)
     for i in range(3):
         for j in range(3):
             if timetable[i][j] < new_table[i][j]:
@@ -120,14 +124,15 @@ def inputTransactions():
             print(f"Current Balance: {balance_table[0]}")
 
         elif s[0] == 'M' or s[0] == 'm':
-            table = pickle.dumps(timetable)
             if s[1] == 'Q' or s[1] == 'q':
-                Qsocket.sendall(bytes(table))
                 nodelist = block.traverse(timetable[1][0])
+                table = pickle.dumps({'table': timetable, 'client': 0, 'log': nodelist})
+                Qsocket.sendall(bytes(table))
 
             elif s[1] == 'R' or s[1] == 'r':
-                Rsocket.sendall(bytes(table))
                 nodelist = block.traverse(timetable[2][0])
+                table = pickle.dumps({'table': timetable, 'client': 0, 'log': nodelist})
+                Rsocket.sendall(bytes(table))
 
 
 if __name__ == '__main__':
