@@ -78,6 +78,7 @@ def listenTransaction(client_connection, client_address):
         x = pickle.loads(msg)
         print(x)
         updateTable(x['table'], x['client'])
+        updateBalance(x['log'])
         logging.debug("[CLIENT MESSAGE] Table obtained from {}".format(str(client_address)))
         # heappush(buffer, Node(x['timestamp'], x['amount'], x['sender'], x['receiver']))
 
@@ -95,10 +96,28 @@ def updateTable(new_table, client):
             timetable[1][i] = timetable[client][i]
 
 
+def updateBalance(nodelist):
+    global balance_table
+    global block
+    for node in nodelist:
+        block.push(node)
+        if node.receiver == 'P' or node.receiver == 'p':
+            balance_table[0] = balance_table[0] + int(node.amount)
+        elif node.receiver == 'Q' or node.receiver == 'q':
+            balance_table[1] = balance_table[1] + int(node.amount)
+        elif node.receiver == 'R' or node.receiver == 'r':
+            balance_table[2] = balance_table[2] + int(node.amount)
+
+        if node.sender == 'P' or node.sender == 'p':
+            balance_table[0] = balance_table[0] - int(node.amount)
+        elif node.sender == 'R' or node.sender == 'r':
+            balance_table[2] = balance_table[2] - int(node.amount)
+
+
 def inputTransactions():
     global timetable
     global balance_table
-    block = Blockchain()
+    global block
 
     while True:
         raw_type = input("Please enter your transaction:")
@@ -136,7 +155,7 @@ def inputTransactions():
 
 
 if __name__ == '__main__':
-
+    block = Blockchain()
     bind_socket.bind(ADDRESS)
     bind_socket.listen()
     try:
