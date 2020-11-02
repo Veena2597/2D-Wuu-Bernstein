@@ -25,6 +25,7 @@ Rsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 Rsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 balance_table = [10, 10, 10]
 timetable = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+transtime = 0
 localchain = []
 
 
@@ -54,12 +55,20 @@ class Blockchain:
             last = last.next
         last.next = node
 
-    def traverse(self, timestamp):
+    def traverse(self, timestamp, table, client):
         temp = self.head
         nodelist = []
         while temp:
-            if temp.timestamp > timestamp:
-                nodelist.append(temp)
+            print(temp)
+            if temp.sender == 'P' or temp.sender == 'p':
+                if temp.timestamp > table[client][0]:
+                    nodelist.append(temp)
+            elif temp.sender == 'Q' or temp.sender == 'q':
+                if temp.timestamp > table[client][1]:
+                    nodelist.append(temp)
+            elif temp.sender == 'R' or temp.sender == 'r':
+                if temp.timestamp > table[client][2]:
+                    nodelist.append(temp)
             temp = temp.next
         return nodelist
 
@@ -76,16 +85,16 @@ def listenTransaction(client_connection, client_address):
     while True:
         msg = client_connection.recv(1024)
         x = pickle.loads(msg)
-        print(x)
         updateTable(x['table'], x['client'])
         updateBalance(x['log'])
         logging.debug("[CLIENT MESSAGE] Table obtained from {}".format(str(client_address)))
+        logging.debug("[TIMETABLE] {}".format(str(timetable)))
+        logging.debug("[BALANCE TABLE] {}".format(str(balance_table)))
         # heappush(buffer, Node(x['timestamp'], x['amount'], x['sender'], x['receiver']))
 
 
 def updateTable(new_table, client):
     global timetable
-    print(client)
     for i in range(3):
         for j in range(3):
             if timetable[i][j] < new_table[i][j]:
@@ -100,6 +109,7 @@ def updateBalance(nodelist):
     global balance_table
     global block
     for node in nodelist:
+        node.next = None
         block.push(node)
         if node.receiver == 'P' or node.receiver == 'p':
             balance_table[0] = balance_table[0] + int(node.amount)
@@ -118,18 +128,19 @@ def inputTransactions():
     global timetable
     global balance_table
     global block
+    global transtime
 
     while True:
         raw_type = input("Please enter your transaction:")
         s = raw_type.split(' ')
-        timestamp = datetime.datetime.now().timestamp()
+        transtime = transtime + 1
 
         if s[0] == 'T' or s[0] == 't':
-            logging.debug("[TRANSFER TRANSACTION] {} at {}".format(s, timestamp))
+            logging.debug("[TRANSFER TRANSACTION] {} at {}".format(s, transtime))
             # tran = {'sender': s[1], 'receiver': s[2], 'amount': s[3], 'timestamp': timestamp}
             if balance_table[0] >= int(s[3]):
-                block.push(Node(timestamp, s[3], s[1], s[2]))
-                timetable[0][0] = timestamp
+                block.push(Node(transtime, s[3], s[1], s[2]))
+                timetable[0][0] = transtime
                 balance_table[0] = balance_table[0] - int(s[3])
                 if s[2] == 'Q' or s[2] == 'q':
                     balance_table[1] = balance_table[1] + int(s[3])
@@ -137,21 +148,25 @@ def inputTransactions():
                     balance_table[2] = balance_table[2] + int(s[3])
             else:
                 print("INCORRECT TRANSACTION")
-            print(timetable)
+            logging.debug("[TIMETABLE] {}".format(str(timetable)))
 
         elif s[0] == 'B' or s[0] == 'b':
             print(f"Current Balance: {balance_table[0]}")
+            logging.debug("[TIMETABLE] {}".format(str(timetable)))
+            logging.debug("[BALANCE TABLE] {}".format(str(balance_table)))
 
         elif s[0] == 'M' or s[0] == 'm':
             if s[1] == 'Q' or s[1] == 'q':
-                nodelist = block.traverse(timetable[1][0])
+                nodelist = block.traverse(timetable[1][0], timetable, 1)
                 table = pickle.dumps({'table': timetable, 'client': 0, 'log': nodelist})
                 Qsocket.sendall(bytes(table))
+                print("MESSAGE SENT TO CLIENT Q FROM P")
 
             elif s[1] == 'R' or s[1] == 'r':
-                nodelist = block.traverse(timetable[2][0])
+                nodelist = block.traverse(timetable[2][0], timetable, 2)
                 table = pickle.dumps({'table': timetable, 'client': 0, 'log': nodelist})
                 Rsocket.sendall(bytes(table))
+                print("MESSAGE SENT TO CLIENT R FROM P")
 
 
 if __name__ == '__main__':
