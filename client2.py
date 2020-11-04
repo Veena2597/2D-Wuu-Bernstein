@@ -174,7 +174,7 @@ if __name__ == '__main__':
     bind_socket.bind(ADDRESS)
     bind_socket.listen()
     try:
-        Psocket.settimeout(10)
+        #Psocket.settimeout(10)
         Psocket.connect_ex((SERVER, 5051))
     except socket.error as exc:
         logging.debug("[EXCEPTION] {}".format(exc))

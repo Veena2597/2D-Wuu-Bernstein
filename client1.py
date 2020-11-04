@@ -174,7 +174,7 @@ if __name__ == '__main__':
     bind_socket.bind(ADDRESS)
     bind_socket.listen()
     try:
-        Qsocket.settimeout(10)
+        #Qsocket.settimeout(10)
         Qsocket.connect_ex((SERVER, 5052))
     except socket.error as exc:
         logging.debug("[EXCEPTION] {}".format(exc))
