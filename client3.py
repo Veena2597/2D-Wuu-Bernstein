@@ -9,7 +9,7 @@ ADDRESS = (SERVER, PORT)
 FORMAT = 'utf-8'
 DISCONNECT_MESSAGE = "DISCONNECTED"
 
-logging.basicConfig(filename='client2.log', level=logging.DEBUG, filemode='w')
+logging.basicConfig(filename='client3.log', level=logging.DEBUG, filemode='w')
 
 # Global variables
 bind_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
