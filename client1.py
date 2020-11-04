@@ -1,11 +1,7 @@
 import socket
-import datetime
-import time
 import threading
 import logging
-import random
 import pickle
-from heapq import *
 
 PORT = 5051
 SERVER = socket.gethostbyname(socket.gethostname())
@@ -16,7 +12,6 @@ DISCONNECT_MESSAGE = "DISCONNECTED"
 logging.basicConfig(filename='client1.log', level=logging.DEBUG, filemode='w')
 
 # Global variables
-client_sockets = []
 bind_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 bind_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 Qsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -25,8 +20,7 @@ Rsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 Rsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 balance_table = [10, 10, 10]
 timetable = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
-transtime = 0
-localchain = []
+logical_clock = 0
 
 
 class Node:
@@ -55,11 +49,10 @@ class Blockchain:
             last = last.next
         last.next = node
 
-    def traverse(self, timestamp, table, client):
+    def traverse(self, table, client):
         temp = self.head
         nodelist = []
         while temp:
-            print(temp)
             if temp.sender == 'P' or temp.sender == 'p':
                 if temp.timestamp > table[client][0]:
                     nodelist.append(temp)
@@ -72,10 +65,10 @@ class Blockchain:
             temp = temp.next
         return nodelist
 
-    def remove(self, timestamp):
+    def remove(self, timestamp, sender):
         temp = self.head
         while temp:
-            if temp.timestamp < timestamp:
+            if temp.timestamp < timestamp and temp.sender.lower() == sender.lower():
                 temp.next = temp.next.next
             temp = temp.next
 
@@ -87,10 +80,10 @@ def listenTransaction(client_connection, client_address):
         x = pickle.loads(msg)
         updateTable(x['table'], x['client'])
         updateBalance(x['log'])
+        garbageCollect()
         logging.debug("[CLIENT MESSAGE] Table obtained from {}".format(str(client_address)))
         logging.debug("[TIMETABLE] {}".format(str(timetable)))
         logging.debug("[BALANCE TABLE] {}".format(str(balance_table)))
-        # heappush(buffer, Node(x['timestamp'], x['amount'], x['sender'], x['receiver']))
 
 
 def updateTable(new_table, client):
@@ -124,23 +117,28 @@ def updateBalance(nodelist):
             balance_table[2] = balance_table[2] - int(node.amount)
 
 
+def garbageCollect():
+    # TODO Find out what events to garbage collect from timetable and use block.remove
+    global timetable
+    global block
+
+
 def inputTransactions():
     global timetable
     global balance_table
     global block
-    global transtime
+    global logical_clock
 
     while True:
         raw_type = input("Please enter your transaction:")
         s = raw_type.split(' ')
-        transtime = transtime + 1
 
         if s[0] == 'T' or s[0] == 't':
-            logging.debug("[TRANSFER TRANSACTION] {} at {}".format(s, transtime))
-            # tran = {'sender': s[1], 'receiver': s[2], 'amount': s[3], 'timestamp': timestamp}
+            logical_clock = logical_clock + 1
+            logging.debug("[TRANSFER TRANSACTION] {} at {}".format(s, logical_clock))
             if balance_table[0] >= int(s[3]):
-                block.push(Node(transtime, s[3], s[1], s[2]))
-                timetable[0][0] = transtime
+                block.push(Node(logical_clock, s[3], s[1], s[2]))
+                timetable[0][0] = logical_clock
                 balance_table[0] = balance_table[0] - int(s[3])
                 if s[2] == 'Q' or s[2] == 'q':
                     balance_table[1] = balance_table[1] + int(s[3])
@@ -157,13 +155,13 @@ def inputTransactions():
 
         elif s[0] == 'M' or s[0] == 'm':
             if s[1] == 'Q' or s[1] == 'q':
-                nodelist = block.traverse(timetable[1][0], timetable, 1)
+                nodelist = block.traverse(timetable, 1)
                 table = pickle.dumps({'table': timetable, 'client': 0, 'log': nodelist})
                 Qsocket.sendall(bytes(table))
                 print("MESSAGE SENT TO CLIENT Q FROM P")
 
             elif s[1] == 'R' or s[1] == 'r':
-                nodelist = block.traverse(timetable[2][0], timetable, 2)
+                nodelist = block.traverse(timetable, 2)
                 table = pickle.dumps({'table': timetable, 'client': 0, 'log': nodelist})
                 Rsocket.sendall(bytes(table))
                 print("MESSAGE SENT TO CLIENT R FROM P")
@@ -174,7 +172,7 @@ if __name__ == '__main__':
     bind_socket.bind(ADDRESS)
     bind_socket.listen()
     try:
-        #Qsocket.settimeout(10)
+        Qsocket.settimeout(10)
         Qsocket.connect_ex((SERVER, 5052))
     except socket.error as exc:
         logging.debug("[EXCEPTION] {}".format(exc))
