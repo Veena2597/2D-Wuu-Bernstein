@@ -68,22 +68,26 @@ class Blockchain:
 
     def remove(self, timestamp, sender):
         temp = self.head
-        if temp.next is None:
-            print(temp.amount)
-            if temp.timestamp <= timestamp and temp.sender.lower() == sender.lower():
-                self.head = None
-                return
-        while temp:
-            if temp.timestamp <= timestamp and temp.sender.lower() == sender.lower():
-                temp.next = temp.next.next
+        prev = None
+        while temp and temp.timestamp <= timestamp and temp.sender.lower() == sender.lower():
+            self.head = temp.next
             temp = temp.next
+        while temp:
+            while temp and (temp.timestamp > timestamp or temp.sender.lower() != sender.lower()):
+                prev = temp
+                temp = temp.next
+            if temp is None:
+                return
+            prev.next = temp.next
+            temp = prev.next
 
     def printChain(self):
-        logging.debug("Events in local log")
+        print_list = []
         temp = self.head
         while temp:
-            logging.debug("[{},{},{}]".format(temp.sender, temp.receiver, temp.amount))
+            print_list.append([temp.sender, temp.receiver, temp.amount])
             temp = temp.next
+        logging.debug("Events in local log: {}".format(print_list))
 
 
 def listenTransaction(client_connection, client_address):
@@ -91,9 +95,8 @@ def listenTransaction(client_connection, client_address):
     while True:
         msg = client_connection.recv(1024)
         x = pickle.loads(msg)
-        print(x)
-        updateTable(x['table'], x['client'])
         updateBalance(x['log'])
+        updateTable(x['table'], x['client'])
         garbageCollect()
         logging.debug("[CLIENT MESSAGE] Table obtained from {}".format(str(client_address)))
         logging.debug("[TIMETABLE] {}".format(str(timetable)))
@@ -117,22 +120,23 @@ def updateBalance(nodelist):
     global block
     for node in nodelist:
         node.next = None
-        block.push(node)
-        if node.receiver == 'P' or node.receiver == 'p':
-            balance_table[0] = balance_table[0] + int(node.amount)
-        elif node.receiver == 'Q' or node.receiver == 'q':
-            balance_table[1] = balance_table[1] + int(node.amount)
-        elif node.receiver == 'R' or node.receiver == 'r':
-            balance_table[2] = balance_table[2] + int(node.amount)
-
-        if node.sender == 'Q' or node.sender == 'q':
+        if (node.sender == 'Q' or node.sender == 'q') and node.timestamp > timetable[0][1]:
             balance_table[1] = balance_table[1] - int(node.amount)
-        elif node.sender == 'R' or node.sender == 'r':
+            block.push(node)
+            if node.receiver == 'P' or node.receiver == 'p':
+                balance_table[0] = balance_table[0] + int(node.amount)
+            elif node.receiver == 'R' or node.receiver == 'r':
+                balance_table[2] = balance_table[2] + int(node.amount)
+        elif (node.sender == 'R' or node.sender == 'r') and node.timestamp > timetable[0][2]:
             balance_table[2] = balance_table[2] - int(node.amount)
+            block.push(node)
+            if node.receiver == 'P' or node.receiver == 'p':
+                balance_table[0] = balance_table[0] + int(node.amount)
+            elif node.receiver == 'Q' or node.receiver == 'q':
+                balance_table[1] = balance_table[1] + int(node.amount)
 
 
 def garbageCollect():
-    # TODO Find out what events to garbage collect from timetable and use block.remove
     global timetable
     global block
     global min_events
@@ -140,7 +144,7 @@ def garbageCollect():
     for i in range(3):
         x = timetable[0][i]
         for j in range(3):
-            if x < timetable[j][i]:
+            if x > timetable[j][i]:
                 x = timetable[j][i]
         if x > min_events[i]:
             block.remove(x, chr(ord('p') + i))
@@ -198,13 +202,13 @@ if __name__ == '__main__':
     bind_socket.bind(ADDRESS)
     bind_socket.listen()
     try:
-        Qsocket.settimeout(10)
+        #Qsocket.settimeout(10)
         Qsocket.connect_ex((SERVER, 5052))
     except socket.error as exc:
         logging.debug("[EXCEPTION] {}".format(exc))
 
     try:
-        Rsocket.settimeout(10)
+        #Rsocket.settimeout(10)
         Rsocket.connect_ex((SERVER, 5053))
     except socket.error as exc:
         logging.debug("[EXCEPTION] {}".format(exc))
