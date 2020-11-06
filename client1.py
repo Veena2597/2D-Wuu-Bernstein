@@ -21,6 +21,7 @@ Rsocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 balance_table = [10, 10, 10]
 timetable = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
 logical_clock = 0
+min_events = [0, 0, 0]
 
 
 class Node:
@@ -67,9 +68,21 @@ class Blockchain:
 
     def remove(self, timestamp, sender):
         temp = self.head
+        if temp.next is None:
+            print(temp.amount)
+            if temp.timestamp <= timestamp and temp.sender.lower() == sender.lower():
+                self.head = None
+                return
         while temp:
-            if temp.timestamp < timestamp and temp.sender.lower() == sender.lower():
+            if temp.timestamp <= timestamp and temp.sender.lower() == sender.lower():
                 temp.next = temp.next.next
+            temp = temp.next
+
+    def printChain(self):
+        logging.debug("Events in local log")
+        temp = self.head
+        while temp:
+            logging.debug("[{},{},{}]".format(temp.sender, temp.receiver, temp.amount))
             temp = temp.next
 
 
@@ -78,6 +91,7 @@ def listenTransaction(client_connection, client_address):
     while True:
         msg = client_connection.recv(1024)
         x = pickle.loads(msg)
+        print(x)
         updateTable(x['table'], x['client'])
         updateBalance(x['log'])
         garbageCollect()
@@ -121,6 +135,17 @@ def garbageCollect():
     # TODO Find out what events to garbage collect from timetable and use block.remove
     global timetable
     global block
+    global min_events
+
+    for i in range(3):
+        x = timetable[0][i]
+        for j in range(3):
+            if x < timetable[j][i]:
+                x = timetable[j][i]
+        if x > min_events[i]:
+            block.remove(x, chr(ord('p') + i))
+            min_events[i] = x
+    block.printChain()
 
 
 def inputTransactions():
@@ -150,6 +175,7 @@ def inputTransactions():
 
         elif s[0] == 'B' or s[0] == 'b':
             print(f"Current Balance: {balance_table[0]}")
+            print(f"Balance Table: {balance_table}")
             logging.debug("[TIMETABLE] {}".format(str(timetable)))
             logging.debug("[BALANCE TABLE] {}".format(str(balance_table)))
 
